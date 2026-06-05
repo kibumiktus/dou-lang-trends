@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DOU — аналіз опитувань зарплат</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#171b2e; --panel2:#1f2540; --text:#e7e9f3;
+    --muted:#9aa3c7; --accent:#4f8cff; --border:#2a3154; --good:#36c576;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--text);line-height:1.45}
+  header{padding:20px 24px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:var(--muted);font-size:13px}
+  .wrap{display:grid;grid-template-columns:320px 1fr;gap:0;min-height:calc(100vh - 70px)}
+  .side{padding:18px;border-right:1px solid var(--border);background:var(--panel);overflow:auto}
+  .main{padding:18px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .chartbox{flex:1;min-height:440px;position:relative}
+  label.field{display:block;margin:12px 0 6px;font-size:12px;color:var(--muted);
+              text-transform:uppercase;letter-spacing:.04em}
+  select,input[type=text]{width:100%;padding:9px 10px;background:var(--panel2);
+       color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{flex:1;padding:8px;background:var(--panel2);color:var(--text);
+       border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .quick{display:flex;gap:6px;margin:8px 0}
+  .quick button{flex:1;padding:6px;font-size:12px;background:var(--panel2);
+       color:var(--muted);border:1px solid var(--border);border-radius:7px;cursor:pointer}
+  .quick button:hover{color:var(--text)}
+  #legend{margin-top:8px;max-height:42vh;overflow:auto;border:1px solid var(--border);
+       border-radius:8px;padding:6px}
+  .leg-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;
+       cursor:pointer;font-size:13px}
+  .leg-item:hover{background:var(--panel2)}
+  .leg-item input{accent-color:var(--accent)}
+  .dot{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+  .leg-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .leg-cnt{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  .stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+  .stats b{color:var(--text);font-variant-numeric:tabular-nums}
+  #status{padding:10px 12px;border-radius:8px;font-size:13px;background:var(--panel2)}
+  #status.err{background:#3a1d24;color:#ffb3c0;border:1px solid #5a2a36}
+  #status.ok{color:var(--good)}
+  #picker{margin-top:10px}
+  #picker input[type=file]{font-size:13px;color:var(--muted)}
+  a{color:var(--accent)}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 DOU — аналіз опитувань зарплат (2017–2025)</h1>
+  <p>Кількість спеціалістів по технологіях за кожне півріччя. Дані парсяться у браузері на льоту.</p>
+</header>
+
+<div class="wrap">
+  <aside class="side">
+    <div id="status">Завантаження CSV…</div>
+
+    <div id="picker" style="display:none">
+      <div class="hint">Не вдалося завантажити файли автоматично (так буває при відкритті
+      через <code>file://</code>). Виберіть 18 CSV-файлів із папки <code>data</code> вручну:</div>
+      <input type="file" id="files" multiple accept=".csv">
+    </div>
+
+    <label class="field">Показник</label>
+    <p style="margin:6px 0;font-size:13px;color:var(--muted)">Основні мови програмування</p>
+
+    <label class="field">Вісь часу</label>
+    <div class="seg" id="xmode">
+      <button data-v="year" class="on">По роках</button>
+      <button data-v="period">По півріччях</button>
+    </div>
+
+    <label class="field">Показник</label>
+    <div class="seg" id="metric">
+      <button data-v="count" class="on">Кількість</button>
+      <button data-v="share">Частка, %</button>
+    </div>
+
+    <label class="field">Технології / категорії</label>
+    <input type="text" id="search" placeholder="пошук…">
+    <div class="quick">
+      <button data-q="10">Топ-10</button>
+      <button data-q="20">Топ-20</button>
+      <button data-q="all">Усі</button>
+      <button data-q="none">Зняти</button>
+    </div>
+    <div id="legend"></div>
+  </aside>
+
+  <main class="main">
+    <div class="card stats" id="stats">—</div>
+    <div class="card chartbox"><canvas id="chart"></canvas></div>
+  </main>
+</div>
+
+<script>
+//---------------------------------------------------------------------------
+// Конфіг: періоди опитувань (різні суфікси залежно від року)
+//---------------------------------------------------------------------------
+const YEARS = [];
+for (let y = 2011; y <= 2025; y++) YEARS.push(y);
+const PERIODS = [];
+YEARS.forEach(y => {
+  // Різні назви для коротких періодів: may (2011-16), jun (2017), june (2018+)
+  const shortMonth = y < 2017 ? 'may' : (y === 2017 ? 'jun' : 'june');
+  PERIODS.push(`${y}_${shortMonth}`);
+  PERIODS.push(`${y}_dec`);
+});
+// Сортуємо за періодом
+PERIODS.sort();
+
+// Колонки, за якими можна групувати (мають читабельні значення)
+const GROUP_COLS = ['value'];
+
+//---------------------------------------------------------------------------
+// Маппінг мов програмування для консолідації варіацій
+//---------------------------------------------------------------------------
+const languageMap = {
+  'C#/.NET': 'C#/.NET', 'C# / .NET': 'C#/.NET', 'C#  NET': 'C#/.NET', 'Unity/C#': 'C#/.NET', 'VBNET': 'C#/.NET',
+  'Go': 'Go', 'Golang': 'Go',
+  'Ruby/Rails': 'Ruby/Rails', 'Ruby': 'Ruby/Rails',
+  'Bash': 'Bash', 'Bash  Shell': 'Bash', 'Bash / Shell / AIR': 'Bash', 'Bash / Shell': 'Bash', 'Bash/Shell': 'Bash', 'Bash,YAML, HCL': 'Bash', 'Bash, terraform': 'Bash', 'bash': 'Bash', 'bash:)': 'Bash', 'BashShell': 'Bash', 'bash scripting': 'Bash',
+  'powershell': 'PowerShell', 'Powershell': 'PowerShell', 'PowerShell': 'PowerShell',
+  'Salesforce Apex': 'Salesforce', 'Salesforce': 'Salesforce', 'Apex': 'Salesforce',
+  'Flex/Flash/AIR': 'Flex/Flash', 'Flex / Flash / AIR': 'Flex/Flash', 'Flex  Flash  AIR': 'Flex/Flash', 'Flex / Flash / AIR': 'Flex/Flash',
+  'Delphi': 'Delphi/Pascal', 'Pascal/Delphi': 'Delphi/Pascal', 'PascalDelphi': 'Delphi/Pascal', 'Pascal, SQL': 'Delphi/Pascal', 'C/AL': 'Delphi/Pascal', 'C/Side': 'Delphi/Pascal', 'AL': 'Delphi/Pascal', 'AL, C/AL': 'Delphi/Pascal', 'AL Business Central': 'Delphi/Pascal', 'D365 BC AL': 'Delphi/Pascal',
+  'X++ / D365': 'Dynamics 365', 'X++  D365': 'Dynamics 365',
+  'SQL': 'SQL', 'Мови розробки БД (PL/SQL, Transact-SQL)': 'SQL', 'Мови розробки БД (PLSQL Transact-SQL)': 'SQL', 'Oracle PL/SQL': 'SQL', 'sql dax': 'SQL', 'Sql, bash': 'SQL', 'SAS, SQL': 'SQL',
+  'DAX': 'Power BI/DAX', 'Dax': 'Power BI/DAX', 'DAX, M': 'Power BI/DAX', 'M,DAX,SQL': 'Power BI/DAX',
+  'HCL': 'Terraform/HCL', 'Terraform HCL': 'Terraform/HCL', 'Terraform': 'Terraform/HCL', 'HCL YAML': 'Terraform/HCL', 'Hcl': 'Terraform/HCL', 'HCL - HashiCorp Configuration Language': 'Terraform/HCL', 'HashiCorp configuration language': 'Terraform/HCL',
+  'Liquid': 'Liquid', 'Liquid code': 'Liquid', 'Shopify Liquid': 'Liquid', 'liquid': 'Liquid',
+  'VBA': 'Visual Basic', 'VBScript': 'Visual Basic', 'Vbscript': 'Visual Basic', 'VBS, та різноманітні мови розмітки': 'Visual Basic', 'VBScript STL FB': 'Visual Basic', 'Visual Basic': 'Visual Basic',
+  'JavaScript': 'JavaScript', 'Typescript': 'JavaScript/TypeScript', 'TypeScript': 'JavaScript/TypeScript', 'TS JS': 'JavaScript/TypeScript', 'Js+ts': 'JavaScript/TypeScript', 'JS TS NodeJS': 'JavaScript/TypeScript', 'Node.js': 'JavaScript/TypeScript', 'Node js': 'JavaScript/TypeScript', 'Nodejs': 'JavaScript/TypeScript', 'Next.js': 'JavaScript/TypeScript', 'Google Apps Script': 'JavaScript/TypeScript', 'React  React Native': 'JavaScript', 'JavaScript (JS) Adobe After Effects': 'JavaScript', 'NodeJS': 'JavaScript/TypeScript',
+  'PHP': 'PHP', 'JavaScript PHP': 'PHP', 'JS PHP': 'JS/PHP',
+  'Python': 'Python', 'python': 'Python', 'Shell, Python': 'Python',
+  'YAML': 'YAML', 'YML': 'YAML', 'Yml': 'YAML', 'yaml powershell': 'YAML',
+  'HTML/CSS': 'HTML/CSS', 'Html': 'HTML/CSS', 'HTML': 'HTML/CSS', 'HTML-CSS': 'HTML/CSS', 'HTMLSCSS': 'HTML/CSS', 'CSS': 'HTML/CSS', 'SCSS': 'HTML/CSS',
+  'Не можу обрати одну основну мову': 'Other', 'Інша': 'Other', 'Інша мова': 'Other', 'Інше': 'Other', 'Other': 'Other', 'Other (впишіть свій варіант)': 'Other', 'не використовую': 'Other', 'не використовую я дизайнер': 'Other', 'Ніякої': 'Other', 'Зараз більше Архітектурної роботи': 'Other', 'Я С розробник але на поточній посаді більше працюю з білд системою чем займаюсь розробкою': 'Other', 'non-tech': 'Other', 'Внутрішня мова компанії': 'Other', 'Тф': 'Other', 'Power platform': 'Other', 'Power Platfrom': 'Other', 'Workday Extend': 'Other', 'Internal IDE': 'Other',
+  'Java (Android)': 'Java', 'Groovy JS': 'Groovy', 'Sas': 'SAS', 'Swift+Kotlin': 'Kotlin', 'Groovy': 'Groovy', 'Rust': 'Rust', 'BASH': 'Bash', 'Cmd, bash': 'Bash', 'shell': 'Bash', 'Elixir': 'Elixir', 'Erlang': 'Erlang', 'R': 'R', 'APL': 'APL', 'Clojure': 'Clojure', 'ABAP': 'ABAP', 'Scala': 'Scala', 'Swift': 'Swift', 'Kotlin': 'Kotlin', 'C': 'C', 'C++': 'C++', 'Perl': 'Perl', '1С': '1С', 'Dart': 'Dart', 'Solidity': 'Solidity', 'Objective-C': 'Objective-C', 'Lua': 'Lua', 'lua': 'Lua', 'LUA': 'Lua',
+  'Assembler': 'Assembler', 'MATLAB': 'MATLAB', 'MuleSoft': 'MuleSoft', 'Verilog': 'Verilog', 'Verilog, System Verilog': 'Verilog', 'SystemVerilog': 'Verilog',
+  'BrightScript': 'BrightScript', 'Brightscript': 'BrightScript', 'BrightScriptXML': 'BrightScript', 'Blueprints': 'Blueprints', 'FlexiLayout Language': 'FlexiLayout', 'FlexiLayout language': 'FlexiLayout',
+  'DataWeave': 'DataWeave', 'Dataweave': 'DataWeave', 'DataWeave / MuleSoft': 'DataWeave', 'Power Fx': 'Power Fx', 'PowerFx': 'Power Fx', 'Gosu': 'Gosu', 'Basic': 'Basic',
+  'Rescript (OCaml)': 'OCaml', 'OCaml': 'OCaml', 'Escrypt': 'Other', 'HLSL': 'HLSL', 'AMPScript': 'Other', 'Appian': 'Other', 'Rust та мова, розроблена компанією': 'Rust', 'PowerBuilder': 'Other', 'ESQL': 'Other', 'Low Code': 'Other', 'hsl': 'HLSL', 'D': 'Other', 'ZPL': 'Other', 'Deluge': 'Other', 'Ampscript': 'Other', 'CUE Lang': 'Other', 'Ada': 'Other', 'autoit': 'Other', 'Codeless': 'Other', 'KQL': 'Other', 'SenseTalk': 'Other', 'Outsystems': 'Other', 'LAD': 'Other', 'Qlik': 'Other', 'VHDL': 'VHDL', 'JS/PHP': 'PHP', 'ArcGIS Arcade': 'Other', 'JQL': 'Other', 'JSONXML': 'Other', 'Corezoid': 'Other', 'LabVIEW': 'Other', 'API': 'Other', 'JSON': 'Other', 'LD/ST': 'Other', 'bubble.io': 'Other', 'Rell': 'Other', 'Майна': 'Other', 'Haskell': 'Haskell', 'Crystal': 'Crystal', 'F#': 'F#', 'ampscript': 'Other',
+};
+
+function normalizeLanguage(lang){
+  if (!lang) return 'Other';
+  const normalized = languageMap[lang];
+  return normalized || lang;
+}
+
+//---------------------------------------------------------------------------
+// CSV-парсер для normalized (спрощений: кожен рядок — це значення)
+// Перший рядок — заголовок, далі — значення у першій колонці
+//---------------------------------------------------------------------------
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return [];
+  // Повертаємо як масив об'єктів з однією властивістю 'value'
+  return lines.slice(1).map(line => {
+    // Видаляємо лапки якщо є
+    let v = line.trim();
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+    return [v]; // Повертаємо як рядок
+  });
+}
+
+//---------------------------------------------------------------------------
+// Стан + агреговані дані
+//   tally[col] -> Map(value -> Map(period -> count))
+//   totals[col] -> Map(period -> кількість рядків з непорожнім значенням)
+//---------------------------------------------------------------------------
+const tally = {};   GROUP_COLS.forEach(c => tally[c] = new Map());
+const totals = {};  GROUP_COLS.forEach(c => totals[c] = new Map());
+let totalRows = 0;
+let loadedPeriods = new Set();
+
+function ingest(period, text){
+  const rows = parseCSV(text);
+  if (!rows.length) return;
+  const col = 'value';
+  for (let r = 0; r < rows.length; r++){
+    let val = rows[r][0];
+    if (!val || val === 'primary_language') continue; // Пропускаємо заголовок/пусті
+    // Нормалізуємо мову
+    val = normalizeLanguage(val);
+    totalRows++;
+    let vm = tally[col].get(val);
+    if (!vm){ vm = new Map(); tally[col].set(val, vm); }
+    vm.set(period, (vm.get(period) || 0) + 1);
+    totals[col].set(period, (totals[col].get(period) || 0) + 1);
+  }
+  loadedPeriods.add(period);
+}
+
+//---------------------------------------------------------------------------
+// Завантаження даних: спершу fetch, інакше — вибір файлів вручну
+//---------------------------------------------------------------------------
+const statusEl = document.getElementById('status');
+function setStatus(msg, cls){ statusEl.textContent = msg; statusEl.className = cls || ''; }
+
+async function tryFetchAll(){
+  let done = 0;
+  await Promise.all(PERIODS.map(async p => {
+    const res = await fetch(`normalized/${p}.csv`, {cache:'no-store'});
+    if (!res.ok) throw new Error(`${p}: HTTP ${res.status}`);
+    const txt = await res.text();
+    ingest(p, txt);
+    setStatus(`Завантажено ${++done}/${PERIODS.length}…`);
+  }));
+}
+
+function handleManualFiles(fileList){
+  const files = [...fileList];
+  const re = /(\d{4})_(dec|june|jun|may)\.csv$/i;
+  let pending = 0, ok = 0;
+  files.forEach(f => {
+    const m = f.name.match(re);
+    if (!m) return;
+    pending++;
+    const reader = new FileReader();
+    reader.onload = () => {
+      ingest(`${m[1]}_${m[2].toLowerCase()}`, reader.result);
+      ok++;
+      setStatus(`Оброблено ${ok}/${pending} файлів…`);
+      if (ok === pending) finishLoading();
+    };
+    reader.readAsText(f, 'utf-8');
+  });
+  if (!pending) setStatus('Не знайдено файлів виду YYYY_MM.csv', 'err');
+}
+
+document.getElementById('files').addEventListener('change', e => handleManualFiles(e.target.files));
+
+function finishLoading(){
+  setStatus(`Готово: ${loadedPeriods.size} періодів, ${totalRows.toLocaleString('uk')} відповідей.`, 'ok');
+  document.getElementById('picker').style.display = 'none';
+  rebuildLegend(true);
+  render();
+}
+
+(async function init(){
+  try{
+    await tryFetchAll();
+    finishLoading();
+  }catch(err){
+    setStatus('Авто-завантаження недоступне. Виберіть CSV-файли вручну ↓', 'err');
+    document.getElementById('picker').style.display = 'block';
+    console.warn('fetch failed:', err);
+  }
+})();
+
+//---------------------------------------------------------------------------
+// UI-стан
+//---------------------------------------------------------------------------
+const state = { col:'value', xmode:'year', metric:'count', selected:new Set(), filter:'' };
+
+function colorFor(i, n){ return `hsl(${Math.round(i*360/Math.max(n,1))} 70% 58%)`; }
+
+// відсортовані значення поточної колонки за сумарною к-стю
+function sortedValues(col){
+  const arr = [];
+  for (const [v, vm] of tally[col]){
+    let s = 0; for (const c of vm.values()) s += c;
+    arr.push([v, s]);
+  }
+  arr.sort((a,b) => b[1]-a[1]);
+  return arr;
+}
+
+function rebuildLegend(resetSelection){
+  const col = state.col;
+  const all = sortedValues(col);
+  if (resetSelection){
+    state.selected = new Set(all.slice(0,10).map(x => x[0]));
+  }
+  const colorIndex = new Map(all.map((x,i) => [x[0], i]));
+  state._all = all; state._colorIndex = colorIndex;
+
+  const filter = state.filter.toLowerCase();
+  const box = document.getElementById('legend');
+  box.innerHTML = '';
+  all.filter(([v]) => !filter || v.toLowerCase().includes(filter))
+     .slice(0, 200)
+     .forEach(([v, s]) => {
+    const i = colorIndex.get(v);
+    const row = document.createElement('label');
+    row.className = 'leg-item';
+    row.innerHTML =
+      `<input type="checkbox" ${state.selected.has(v)?'checked':''}>`+
+      `<span class="dot" style="background:${colorFor(i, all.length)}"></span>`+
+      `<span class="leg-name" title="${v}">${v}</span>`+
+      `<span class="leg-cnt">${s.toLocaleString('uk')}</span>`;
+    row.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) state.selected.add(v); else state.selected.delete(v);
+      render();
+    });
+    box.appendChild(row);
+  });
+}
+
+// значення ряду по осі X
+function seriesFor(col, value){
+  const vm = tally[col].get(value) || new Map();
+  const labels = state.xmode === 'year' ? YEARS : PERIODS;
+  return labels.map(lbl => {
+    let count, total;
+    if (state.xmode === 'year'){
+      // Рік — сумуємо обидва періоди (з врахуванням різних суфіксів)
+      const shortMonth = lbl < 2017 ? 'may' : (lbl === 2017 ? 'jun' : 'june');
+      const p1 = `${lbl}_${shortMonth}`;
+      const p2 = `${lbl}_dec`;
+      count = (vm.get(p1)||0) + (vm.get(p2)||0);
+      total = (totals[col].get(p1)||0) + (totals[col].get(p2)||0);
+    } else {
+      count = vm.get(lbl)||0;
+      total = totals[col].get(lbl)||0;
+    }
+    if (state.metric === 'share') return total ? +(count/total*100).toFixed(2) : 0;
+    return count;
+  });
+}
+
+//---------------------------------------------------------------------------
+// Графік
+//---------------------------------------------------------------------------
+let chart;
+function render(){
+  if (typeof Chart === 'undefined'){
+    setStatus('Не завантажилась бібліотека Chart.js (потрібен інтернет).', 'err');
+    return;
+  }
+  const col = state.col;
+  const labels = state.xmode === 'year' ? YEARS.map(String) : PERIODS;
+  const all = state._all || [];
+  const datasets = all
+    .filter(([v]) => state.selected.has(v))
+    .map(([v]) => {
+      const i = state._colorIndex.get(v);
+      const color = colorFor(i, all.length);
+      return {
+        label: v,
+        data: seriesFor(col, v),
+        borderColor: color,
+        backgroundColor: color,
+        pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
+        tension: .25, spanGaps: true,
+      };
+    });
+
+  const yTitle = state.metric === 'share' ? 'Частка відповідей, %' : 'Кількість спеціалістів';
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'nearest', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          callbacks: {
+            label: c => `${c.dataset.label}: ${c.parsed.y.toLocaleString('uk')}`+
+                         (state.metric==='share'?'%':'')
+          }
+        }
+      },
+      scales: {
+        x: { grid:{color:'#222845'}, ticks:{color:'#9aa3c7'} },
+        y: { grid:{color:'#222845'}, ticks:{color:'#9aa3c7'},
+             title:{display:true,text:yTitle,color:'#9aa3c7'}, beginAtZero:true }
+      }
+    }
+  });
+
+  // статистика
+  const distinct = all.length;
+  document.getElementById('stats').innerHTML =
+    `<span>Дані: <b>Основні мови програмування</b></span>`+
+    `<span>Унікальних значень: <b>${distinct.toLocaleString('uk')}</b></span>`+
+    `<span>Показано рядів: <b>${datasets.length}</b></span>`+
+    `<span>Усього відповідей: <b>${totalRows.toLocaleString('uk')}</b></span>`;
+}
+
+//---------------------------------------------------------------------------
+// Прив'язка контролів
+//---------------------------------------------------------------------------
+document.querySelectorAll('#xmode button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#xmode button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); state.xmode = b.dataset.v; render();
+}));
+document.querySelectorAll('#metric button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#metric button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); state.metric = b.dataset.v; render();
+}));
+document.getElementById('search').addEventListener('input', e => {
+  state.filter = e.target.value; rebuildLegend(false);
+});
+document.querySelectorAll('.quick button').forEach(b => b.addEventListener('click', () => {
+  const q = b.dataset.q; const all = state._all || [];
+  if (q === 'none') state.selected = new Set();
+  else if (q === 'all') state.selected = new Set(all.map(x => x[0]));
+  else state.selected = new Set(all.slice(0, +q).map(x => x[0]));
+  rebuildLegend(false); render();
+}));
+</script>
+</body>
+</html>
