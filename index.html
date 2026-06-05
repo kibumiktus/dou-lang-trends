@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DOU — аналіз опитувань зарплат</title>
+<title>DOU — Salary Survey Analytics</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root{
@@ -16,6 +16,14 @@
   header{padding:20px 24px;border-bottom:1px solid var(--border);background:var(--panel)}
   header h1{margin:0 0 4px;font-size:20px}
   header p{margin:0;color:var(--muted);font-size:13px}
+  .header-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .lang-switch{display:flex;gap:4px;flex-shrink:0;margin-top:2px}
+  .lang-switch button{
+    background:var(--panel2);color:var(--muted);border:1px solid var(--border);
+    border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;white-space:nowrap;
+  }
+  .lang-switch button:hover{color:var(--text)}
+  .lang-switch button.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .wrap{display:grid;grid-template-columns:320px 1fr;gap:0;min-height:calc(100vh - 70px)}
   .side{padding:18px;border-right:1px solid var(--border);background:var(--panel);overflow:auto}
   .main{padding:18px;display:flex;flex-direction:column;gap:14px}
@@ -55,42 +63,49 @@
 </head>
 <body>
 <header>
-  <h1>📊 DOU — аналіз опитувань зарплат (2017–2025)</h1>
-  <p>Кількість спеціалістів по технологіях за кожне півріччя. Дані парсяться у браузері на льоту.</p>
+  <div class="header-row">
+    <div>
+      <h1 data-i18n="heading">📊 DOU — Salary Survey Analytics (2011–2025)</h1>
+      <p data-i18n="subheading">Number of specialists per technology for each half-year. Data is parsed in the browser on the fly.</p>
+    </div>
+    <div class="lang-switch">
+      <button data-lang="en" class="on">EN</button>
+      <button data-lang="uk">UA</button>
+    </div>
+  </div>
 </header>
 
 <div class="wrap">
   <aside class="side">
-    <div id="status">Завантаження CSV…</div>
+    <div id="status">Loading CSV…</div>
 
     <div id="picker" style="display:none">
-      <div class="hint">Не вдалося завантажити файли автоматично (так буває при відкритті
-      через <code>file://</code>). Виберіть 18 CSV-файлів із папки <code>data</code> вручну:</div>
+      <div class="hint" id="hintManual">Auto-load failed (this happens when opening via <code>file://</code>). Select 18 CSV files from the <code>data</code> folder manually:</div>
       <input type="file" id="files" multiple accept=".csv">
     </div>
 
-    <label class="field">Показник</label>
-    <p style="margin:6px 0;font-size:13px;color:var(--muted)">Основні мови програмування</p>
+    <label class="field" data-i18n="labelMetric">Metric</label>
+    <p style="margin:6px 0;font-size:13px;color:var(--muted)" data-i18n="labelPrimary">Primary Programming Languages</p>
 
-    <label class="field">Вісь часу</label>
+    <label class="field" data-i18n="labelXAxis">Time axis</label>
     <div class="seg" id="xmode">
-      <button data-v="year" class="on">По роках</button>
-      <button data-v="period">По півріччях</button>
+      <button data-v="year" class="on" data-i18n="btnYear">By year</button>
+      <button data-v="period" data-i18n="btnPeriod">By half-year</button>
     </div>
 
-    <label class="field">Показник</label>
+    <label class="field" data-i18n="labelMetric">Metric</label>
     <div class="seg" id="metric">
-      <button data-v="count" class="on">Кількість</button>
-      <button data-v="share">Частка, %</button>
+      <button data-v="count" class="on" data-i18n="btnCount">Count</button>
+      <button data-v="share" data-i18n="btnShare">Share, %</button>
     </div>
 
-    <label class="field">Технології / категорії</label>
-    <input type="text" id="search" placeholder="пошук…">
+    <label class="field" data-i18n="labelTech">Technologies / categories</label>
+    <input type="text" id="search" data-i18n-placeholder="searchPlaceholder" placeholder="search…">
     <div class="quick">
-      <button data-q="10">Топ-10</button>
-      <button data-q="20">Топ-20</button>
-      <button data-q="all">Усі</button>
-      <button data-q="none">Зняти</button>
+      <button data-q="10"   data-i18n="btnTop10">Top-10</button>
+      <button data-q="20"   data-i18n="btnTop20">Top-20</button>
+      <button data-q="all"  data-i18n="btnAll">All</button>
+      <button data-q="none" data-i18n="btnNone">Clear</button>
     </div>
     <div id="legend"></div>
   </aside>
@@ -103,21 +118,134 @@
 
 <script>
 //---------------------------------------------------------------------------
+// Internationalisation
+//---------------------------------------------------------------------------
+const TRANSLATIONS = {
+  uk: {
+    pageTitle:        'DOU — аналіз опитувань зарплат',
+    heading:          '📊 DOU — аналіз опитувань зарплат (2011–2025)',
+    subheading:       'Кількість спеціалістів по технологіях за кожне півріччя. Дані парсяться у браузері на льоту.',
+    labelMetric:      'Показник',
+    labelPrimary:     'Основні мови програмування',
+    labelXAxis:       'Вісь часу',
+    btnYear:          'По роках',
+    btnPeriod:        'По півріччях',
+    btnCount:         'Кількість',
+    btnShare:         'Частка, %',
+    labelTech:        'Технології / категорії',
+    searchPlaceholder:'пошук…',
+    btnTop10:         'Топ-10',
+    btnTop20:         'Топ-20',
+    btnAll:           'Усі',
+    btnNone:          'Зняти',
+    statusLoading:    'Завантаження CSV…',
+    statusLoadingN:   (done, total) => `Завантажено ${done}/${total}…`,
+    statusProcessed:  (ok, total) => `Оброблено ${ok}/${total} файлів…`,
+    statusNoFiles:    'Не знайдено файлів виду YYYY_MM.csv',
+    statusDone:       (periods, rows) => `Готово: ${periods} періодів, ${rows} відповідей.`,
+    statusAutoFail:   'Авто-завантаження недоступне. Виберіть CSV-файли вручну ↓',
+    statusNoChartJS:  'Не завантажилась бібліотека Chart.js (потрібен інтернет).',
+    hintManual:       'Не вдалося завантажити файли автоматично (так буває при відкритті через <code>file://</code>). Виберіть 18 CSV-файлів із папки <code>data</code> вручну:',
+    yAxisShare:       'Частка відповідей, %',
+    yAxisCount:       'Кількість спеціалістів',
+    statsData:        'Дані',
+    statsPrimary:     'Основні мови програмування',
+    statsUnique:      'Унікальних значень',
+    statsSeries:      'Показано рядів',
+    statsTotal:       'Усього відповідей',
+    locale:           'uk',
+  },
+  en: {
+    pageTitle:        'DOU — Salary Survey Analytics',
+    heading:          '📊 DOU — Salary Survey Analytics (2011–2025)',
+    subheading:       'Number of specialists per technology for each half-year. Data is parsed in the browser on the fly.',
+    labelMetric:      'Metric',
+    labelPrimary:     'Primary Programming Languages',
+    labelXAxis:       'Time axis',
+    btnYear:          'By year',
+    btnPeriod:        'By half-year',
+    btnCount:         'Count',
+    btnShare:         'Share, %',
+    labelTech:        'Technologies / categories',
+    searchPlaceholder:'search…',
+    btnTop10:         'Top-10',
+    btnTop20:         'Top-20',
+    btnAll:           'All',
+    btnNone:          'Clear',
+    statusLoading:    'Loading CSV…',
+    statusLoadingN:   (done, total) => `Loaded ${done}/${total}…`,
+    statusProcessed:  (ok, total) => `Processed ${ok}/${total} files…`,
+    statusNoFiles:    'No files matching YYYY_MM.csv found',
+    statusDone:       (periods, rows) => `Done: ${periods} periods, ${rows} responses.`,
+    statusAutoFail:   'Auto-load unavailable. Select CSV files manually ↓',
+    statusNoChartJS:  'Chart.js library failed to load (internet required).',
+    hintManual:       'Auto-load failed (this happens when opening via <code>file://</code>). Select 18 CSV files from the <code>data</code> folder manually:',
+    yAxisShare:       'Response share, %',
+    yAxisCount:       'Number of specialists',
+    statsData:        'Data',
+    statsPrimary:     'Primary Programming Languages',
+    statsUnique:      'Unique values',
+    statsSeries:      'Series shown',
+    statsTotal:       'Total responses',
+    locale:           'en',
+  }
+};
+
+let lang = 'en';
+function t(key){ return TRANSLATIONS[lang][key]; }
+
+//---------------------------------------------------------------------------
+// Status — tracks last message so language switch can re-render it
+//---------------------------------------------------------------------------
+const statusEl = document.getElementById('status');
+let _lastStatus = null;
+
+function setStatus(msgFn, cls){
+  _lastStatus = { msgFn, cls };
+  statusEl.textContent = typeof msgFn === 'function' ? msgFn() : msgFn;
+  statusEl.className = cls || '';
+}
+
+function applyTranslations(){
+  document.documentElement.lang = lang;
+  document.title = t('pageTitle');
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.getElementById('hintManual').innerHTML = t('hintManual');
+  document.querySelectorAll('.lang-switch button').forEach(b => {
+    b.classList.toggle('on', b.dataset.lang === lang);
+  });
+  if (_lastStatus) setStatus(_lastStatus.msgFn, _lastStatus.cls);
+}
+
+document.querySelectorAll('.lang-switch button').forEach(b => {
+  b.addEventListener('click', () => {
+    if (b.dataset.lang === lang) return;
+    lang = b.dataset.lang;
+    applyTranslations();
+    if (totalRows > 0){ rebuildLegend(false); render(); }
+  });
+});
+
+setStatus(() => t('statusLoading'));
+
+//---------------------------------------------------------------------------
 // Конфіг: періоди опитувань (різні суфікси залежно від року)
 //---------------------------------------------------------------------------
 const YEARS = [];
 for (let y = 2011; y <= 2025; y++) YEARS.push(y);
 const PERIODS = [];
 YEARS.forEach(y => {
-  // Різні назви для коротких періодів: may (2011-16), jun (2017), june (2018+)
   const shortMonth = y < 2017 ? 'may' : (y === 2017 ? 'jun' : 'june');
   PERIODS.push(`${y}_${shortMonth}`);
   PERIODS.push(`${y}_dec`);
 });
-// Сортуємо за періодом
 PERIODS.sort();
 
-// Колонки, за якими можна групувати (мають читабельні значення)
 const GROUP_COLS = ['value'];
 
 //---------------------------------------------------------------------------
@@ -158,25 +286,20 @@ function normalizeLanguage(lang){
 }
 
 //---------------------------------------------------------------------------
-// CSV-парсер для normalized (спрощений: кожен рядок — це значення)
-// Перший рядок — заголовок, далі — значення у першій колонці
+// CSV-парсер
 //---------------------------------------------------------------------------
 function parseCSV(text){
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (!lines.length) return [];
-  // Повертаємо як масив об'єктів з однією властивістю 'value'
   return lines.slice(1).map(line => {
-    // Видаляємо лапки якщо є
     let v = line.trim();
     if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    return [v]; // Повертаємо як рядок
+    return [v];
   });
 }
 
 //---------------------------------------------------------------------------
 // Стан + агреговані дані
-//   tally[col] -> Map(value -> Map(period -> count))
-//   totals[col] -> Map(period -> кількість рядків з непорожнім значенням)
 //---------------------------------------------------------------------------
 const tally = {};   GROUP_COLS.forEach(c => tally[c] = new Map());
 const totals = {};  GROUP_COLS.forEach(c => totals[c] = new Map());
@@ -189,8 +312,7 @@ function ingest(period, text){
   const col = 'value';
   for (let r = 0; r < rows.length; r++){
     let val = rows[r][0];
-    if (!val || val === 'primary_language') continue; // Пропускаємо заголовок/пусті
-    // Нормалізуємо мову
+    if (!val || val === 'primary_language') continue;
     val = normalizeLanguage(val);
     totalRows++;
     let vm = tally[col].get(val);
@@ -202,11 +324,8 @@ function ingest(period, text){
 }
 
 //---------------------------------------------------------------------------
-// Завантаження даних: спершу fetch, інакше — вибір файлів вручну
+// Завантаження даних
 //---------------------------------------------------------------------------
-const statusEl = document.getElementById('status');
-function setStatus(msg, cls){ statusEl.textContent = msg; statusEl.className = cls || ''; }
-
 async function tryFetchAll(){
   let done = 0;
   await Promise.all(PERIODS.map(async p => {
@@ -214,7 +333,8 @@ async function tryFetchAll(){
     if (!res.ok) throw new Error(`${p}: HTTP ${res.status}`);
     const txt = await res.text();
     ingest(p, txt);
-    setStatus(`Завантажено ${++done}/${PERIODS.length}…`);
+    done++;
+    setStatus(() => t('statusLoadingN')(done, PERIODS.length));
   }));
 }
 
@@ -230,18 +350,18 @@ function handleManualFiles(fileList){
     reader.onload = () => {
       ingest(`${m[1]}_${m[2].toLowerCase()}`, reader.result);
       ok++;
-      setStatus(`Оброблено ${ok}/${pending} файлів…`);
+      setStatus(() => t('statusProcessed')(ok, pending));
       if (ok === pending) finishLoading();
     };
     reader.readAsText(f, 'utf-8');
   });
-  if (!pending) setStatus('Не знайдено файлів виду YYYY_MM.csv', 'err');
+  if (!pending) setStatus(() => t('statusNoFiles'), 'err');
 }
 
 document.getElementById('files').addEventListener('change', e => handleManualFiles(e.target.files));
 
 function finishLoading(){
-  setStatus(`Готово: ${loadedPeriods.size} періодів, ${totalRows.toLocaleString('uk')} відповідей.`, 'ok');
+  setStatus(() => t('statusDone')(loadedPeriods.size, totalRows.toLocaleString(t('locale'))), 'ok');
   document.getElementById('picker').style.display = 'none';
   rebuildLegend(true);
   render();
@@ -252,7 +372,7 @@ function finishLoading(){
     await tryFetchAll();
     finishLoading();
   }catch(err){
-    setStatus('Авто-завантаження недоступне. Виберіть CSV-файли вручну ↓', 'err');
+    setStatus(() => t('statusAutoFail'), 'err');
     document.getElementById('picker').style.display = 'block';
     console.warn('fetch failed:', err);
   }
@@ -265,7 +385,6 @@ const state = { col:'value', xmode:'year', metric:'count', selected:new Set(), f
 
 function colorFor(i, n){ return `hsl(${Math.round(i*360/Math.max(n,1))} 70% 58%)`; }
 
-// відсортовані значення поточної колонки за сумарною к-стю
 function sortedValues(col){
   const arr = [];
   for (const [v, vm] of tally[col]){
@@ -298,7 +417,7 @@ function rebuildLegend(resetSelection){
       `<input type="checkbox" ${state.selected.has(v)?'checked':''}>`+
       `<span class="dot" style="background:${colorFor(i, all.length)}"></span>`+
       `<span class="leg-name" title="${v}">${v}</span>`+
-      `<span class="leg-cnt">${s.toLocaleString('uk')}</span>`;
+      `<span class="leg-cnt">${s.toLocaleString(t('locale'))}</span>`;
     row.querySelector('input').addEventListener('change', e => {
       if (e.target.checked) state.selected.add(v); else state.selected.delete(v);
       render();
@@ -307,14 +426,12 @@ function rebuildLegend(resetSelection){
   });
 }
 
-// значення ряду по осі X
 function seriesFor(col, value){
   const vm = tally[col].get(value) || new Map();
   const labels = state.xmode === 'year' ? YEARS : PERIODS;
   return labels.map(lbl => {
     let count, total;
     if (state.xmode === 'year'){
-      // Рік — сумуємо обидва періоди (з врахуванням різних суфіксів)
       const shortMonth = lbl < 2017 ? 'may' : (lbl === 2017 ? 'jun' : 'june');
       const p1 = `${lbl}_${shortMonth}`;
       const p2 = `${lbl}_dec`;
@@ -335,7 +452,7 @@ function seriesFor(col, value){
 let chart;
 function render(){
   if (typeof Chart === 'undefined'){
-    setStatus('Не завантажилась бібліотека Chart.js (потрібен інтернет).', 'err');
+    setStatus(() => t('statusNoChartJS'), 'err');
     return;
   }
   const col = state.col;
@@ -356,7 +473,7 @@ function render(){
       };
     });
 
-  const yTitle = state.metric === 'share' ? 'Частка відповідей, %' : 'Кількість спеціалістів';
+  const yTitle = state.metric === 'share' ? t('yAxisShare') : t('yAxisCount');
 
   if (chart) chart.destroy();
   chart = new Chart(document.getElementById('chart'), {
@@ -369,7 +486,7 @@ function render(){
         legend: { display:false },
         tooltip: {
           callbacks: {
-            label: c => `${c.dataset.label}: ${c.parsed.y.toLocaleString('uk')}`+
+            label: c => `${c.dataset.label}: ${c.parsed.y.toLocaleString(t('locale'))}`+
                          (state.metric==='share'?'%':'')
           }
         }
@@ -382,13 +499,12 @@ function render(){
     }
   });
 
-  // статистика
   const distinct = all.length;
   document.getElementById('stats').innerHTML =
-    `<span>Дані: <b>Основні мови програмування</b></span>`+
-    `<span>Унікальних значень: <b>${distinct.toLocaleString('uk')}</b></span>`+
-    `<span>Показано рядів: <b>${datasets.length}</b></span>`+
-    `<span>Усього відповідей: <b>${totalRows.toLocaleString('uk')}</b></span>`;
+    `<span>${t('statsData')}: <b>${t('statsPrimary')}</b></span>`+
+    `<span>${t('statsUnique')}: <b>${distinct.toLocaleString(t('locale'))}</b></span>`+
+    `<span>${t('statsSeries')}: <b>${datasets.length}</b></span>`+
+    `<span>${t('statsTotal')}: <b>${totalRows.toLocaleString(t('locale'))}</b></span>`;
 }
 
 //---------------------------------------------------------------------------
