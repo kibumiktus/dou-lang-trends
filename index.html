@@ -191,7 +191,10 @@ const TRANSLATIONS = {
   }
 };
 
-let lang = 'en';
+function hashToLang(hash){ return hash === '#ua' ? 'uk' : 'en'; }
+function langToHash(l){ return l === 'uk' ? '#ua' : '#en'; }
+
+let lang = hashToLang(location.hash);
 function t(key){ return TRANSLATIONS[lang][key]; }
 
 //---------------------------------------------------------------------------
@@ -222,15 +225,20 @@ function applyTranslations(){
   if (_lastStatus) setStatus(_lastStatus.msgFn, _lastStatus.cls);
 }
 
+function switchLang(newLang){
+  if (newLang === lang) return;
+  lang = newLang;
+  applyTranslations();
+  if (totalRows > 0){ rebuildLegend(false); render(); }
+}
+
 document.querySelectorAll('.lang-switch button').forEach(b => {
-  b.addEventListener('click', () => {
-    if (b.dataset.lang === lang) return;
-    lang = b.dataset.lang;
-    applyTranslations();
-    if (totalRows > 0){ rebuildLegend(false); render(); }
-  });
+  b.addEventListener('click', () => { location.hash = langToHash(b.dataset.lang); });
 });
 
+window.addEventListener('hashchange', () => { switchLang(hashToLang(location.hash)); });
+
+applyTranslations();
 setStatus(() => t('statusLoading'));
 
 //---------------------------------------------------------------------------
